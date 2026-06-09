@@ -1,6 +1,7 @@
 package oquic
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -64,6 +65,9 @@ func NewPeerNetClient() (*PeerNetClient, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	conn.SetReadBuffer(2500000)
+	conn.SetWriteBuffer(2500000)
 
 	return &PeerNetClient{
 		token:          0,
@@ -198,15 +202,17 @@ func (c *PeerNetClient) SendFile(path string) error {
 		return err
 	}
 
+	bufReader := bufio.NewReaderSize(f, 10*1024*1024)
 	tracker := &progressTracker{
 		Total:      uint64(stat.Size()),
 		LastUpdate: time.Now(),
 	}
 
-	reader := io.TeeReader(f, tracker)
+	reader := io.TeeReader(bufReader, tracker)
 
 	fmt.Printf("Sending: %d bytes\n", stat.Size())
-	written, err := io.Copy(s, reader)
+	transferBuf := make([]byte, 512*1024)
+	written, err := io.CopyBuffer(s, reader, transferBuf)
 	fmt.Println()
 
 	if err != nil {
@@ -257,14 +263,20 @@ func (c *PeerNetClient) RecvFile(path string) error {
 	contentLen := binary.BigEndian.Uint64(lbuf)
 	fmt.Printf("Receiving: %d bytes\n", contentLen)
 
+	bufWriter := bufio.NewWriterSize(f, 10*1024*1024)
+	defer bufWriter.Flush()
+
 	tracker := &progressTracker{
 		Total:      contentLen,
 		LastUpdate: time.Now(),
 	}
 
-	writer := io.MultiWriter(f, tracker)
+	writer := io.MultiWriter(bufWriter, tracker)
 
-	read, err := io.CopyN(writer, s, int64(contentLen))
+	limitReader := io.LimitReader(s, int64(contentLen))
+	transferBuf := make([]byte, 512*1024)
+
+	read, err := io.CopyBuffer(writer, limitReader, transferBuf)
 	fmt.Println()
 
 	if err != nil && err != io.EOF {

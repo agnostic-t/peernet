@@ -41,7 +41,12 @@ func NewQUICClient(alpn string, udpConn *net.UDPConn, ctx context.Context) *QUIC
 func (c *QUICClient) Connect(remote net.Addr) error {
 	c.remoteAddress = remote
 
-	conn, err := quic.Dial(c.ctx, c.UDPConn, remote, c.tlsConf, nil)
+	qconf := &quic.Config{
+		MaxStreamReceiveWindow:     5 * 1024 * 1024,
+		MaxConnectionReceiveWindow: 10 * 1024 * 1024,
+	}
+
+	conn, err := quic.Dial(c.ctx, c.UDPConn, remote, c.tlsConf, qconf)
 	if err != nil {
 		return err
 	}

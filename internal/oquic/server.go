@@ -62,7 +62,12 @@ func NewQUICServer(alpn string, udpConn *net.UDPConn, ctx context.Context) (*QUI
 }
 
 func (s *QUICServer) Start() error {
-	listener, err := quic.Listen(s.UDPConn, s.tlsConf, nil)
+	qconf := &quic.Config{
+		MaxStreamReceiveWindow:     5 * 1024 * 1024,
+		MaxConnectionReceiveWindow: 10 * 1024 * 1024,
+	}
+
+	listener, err := quic.Listen(s.UDPConn, s.tlsConf, qconf)
 	if err != nil {
 		return err
 	}
